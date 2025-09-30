@@ -1,0 +1,434 @@
+import pygame
+import numpy as np
+import math
+import sys
+from pygame.locals import *
+
+# Initialize Pygame
+pygame.init()
+
+# Constants
+WIDTH, HEIGHT = 1200, 800
+CENTER_X, CENTER_Y = WIDTH // 2, HEIGHT // 2
+LENS_RADIUS = 120
+LENS_SPACING = 150
+SNAP_ANGLES = [0, 45, 90, 135, 180, 225, 270, 315, 360]
+SNAP_THRESHOLD = 8
+
+# Colors
+BACKGROUND = (15, 25, 35)
+PANEL_BG = (25, 40, 55)
+TEXT_COLOR = (220, 230, 240)
+HIGHLIGHT = (0, 200, 255)
+MEDICAL_GREEN = (100, 255, 150)
+BIO_BLUE = (100, 200, 255)
+LENS_COLOR = (100, 150, 200, 100)
+
+# Create window
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Smart Polarization Contact Lens Manufacturing Simulator")
+
+# Fonts
+font = pygame.font.SysFont('consolas', 12)
+title_font = pygame.font.SysFont('consolas', 14, bold=True)
+header_font = pygame.font.SysFont('consolas', 16, bold=True)
+
+class BiomedicalMaterial:
+    def __init__(self, name, oxygen_permeability, wettability, modulus, cost, polarization_efficiency):
+        self.name = name
+        self.dk = oxygen_permeability  # Dk value (Barrer)
+        self.wettability = wettability  # Contact angle degrees
+        self.modulus = modulus  # MPa
+        self.cost = cost  # USD per lens
+        self.polarization_efficiency = polarization_efficiency
+        
+    def get_comfort_score(self):
+        return (self.dk/150 + (100 - self.wettability)/100 + (0.8 - self.modulus/10)) / 3
+
+# Latest contact lens materials (2024)
+MATERIALS = {
+    "Silicone Hydrogel (Standard)": BiomedicalMaterial("Silicone Hydrogel", 140, 80, 0.7, 2.50, 0.92),
+    "Graphene-Enhanced Hydrogel": BiomedicalMaterial("Graphene Hydrogel", 180, 60, 0.5, 8.00, 0.97),
+    "Liquid Crystal Elastomer": BiomedicalMaterial("LC Elastomer", 160, 45, 0.3, 15.00, 0.99),
+    "MoS2 Nanocomposite": BiomedicalMaterial("MoS2 Composite", 200, 50, 0.4, 12.00, 0.98),
+    "Biomimetic Polymer": BiomedicalMaterial("Biomimetic", 170, 35, 0.6, 6.00, 0.95)
+}
+
+class SmartContactLens:
+    def __init__(self, x, y, radius):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.polarization_layers = []
+        self.material = MATERIALS["Silicone Hydrogel (Standard)"]
+        self.embedded_sensors = True
+        self.power_source = "Bio-kinetic"
+        self.auto_rotation = False
+        self.auto_rotation_speed = 1.0
+        
+    def add_polarization_layer(self, angle, thickness):
+        self.polarization_layers.append({
+            'angle': angle,
+            'thickness': thickness,  # microns
+            'active': True
+        })
+        
+    def draw(self, surface, mouse_pos):
+        # Draw contact lens structure
+        pygame.draw.circle(surface, (200, 200, 255, 50), (self.x, self.y), self.radius, 2)
+        pygame.draw.circle(surface, (150, 150, 255, 30), (self.x, self.y), self.radius - 10, 1)
+        
+        # Draw polarization layers
+        for i, layer in enumerate(self.polarization_layers):
+            layer_radius = self.radius - (i * 15)
+            if layer_radius > 20:  # Minimum size
+                color = MEDICAL_GREEN if layer['active'] else (100, 100, 100)
+                pygame.draw.circle(surface, color, (self.x, self.y), layer_radius, 1)
+                
+                # Draw polarization angle
+                angle_rad = math.radians(layer['angle'])
+                dx = math.cos(angle_rad) * layer_radius
+                dy = math.sin(angle_rad) * layer_radius
+                pygame.draw.line(surface, color, 
+                                (self.x - dx/2, self.y - dy/2), 
+                                (self.x + dx/2, self.y + dy/2), 2)
+        
+        # Draw embedded components
+        if self.embedded_sensors:
+            for angle in [0, 120, 240]:
+                sensor_rad = math.radians(angle)
+                sx = self.x + math.cos(sensor_rad) * (self.radius - 25)
+                sy = self.y + math.sin(sensor_rad) * (self.radius - 25)
+                pygame.draw.circle(surface, BIO_BLUE, (int(sx), int(sy)), 5)
+        
+        # Draw power source
+        pygame.draw.circle(surface, (255, 200, 100), (self.x, self.y), 8)
+
+class ManufacturingPanel:
+    def __init__(self, x, y, width, height):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.selected_material = "Silicone Hydrogel (Standard)"
+        
+    def draw(self, surface, lens):
+        # Main panel
+        pygame.draw.rect(surface, PANEL_BG, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(surface, HIGHLIGHT, (self.x, self.y, self.width, self.height), 2)
+        
+        title = header_font.render("CONTACT LENS MANUFACTURING SPECIFICATIONS", True, MEDICAL_GREEN)
+        surface.blit(title, (self.x + 10, self.y + 15))
+        
+        # Material properties
+        material = lens.material
+        y_offset = 45
+        
+        properties = [
+            f"Material: {material.name}",
+            f"Oxygen Permeability (Dk): {material.dk} Barrer",
+            f"Wettability: {material.wettability}° contact angle",
+            f"Modulus: {material.modulus} MPa",
+            f"Comfort Score: {material.get_comfort_score():.2f}/1.0",
+            f"Polarization Efficiency: {material.polarization_efficiency:.1%}",
+            f"Manufacturing Cost: ${material.cost:.2f} per lens",
+            f"Power Source: {lens.power_source}",
+            f"Auto-rotation: {'ENABLED' if lens.auto_rotation else 'DISABLED'}"
+        ]
+        
+        for i, text in enumerate(properties):
+            color = MEDICAL_GREEN if i == 0 else TEXT_COLOR
+            surf = font.render(text, True, color)
+            surface.blit(surf, (self.x + 15, self.y + y_offset + i * 20))
+        
+        # Manufacturing metrics
+        y_offset += 180
+        metrics_title = title_font.render("MANUFACTURING FEASIBILITY", True, HIGHLIGHT)
+        surface.blit(metrics_title, (self.x + 15, self.y + y_offset))
+        
+        # Calculate manufacturing scores
+        comfort_score = material.get_comfort_score()
+        polarization_score = material.polarization_efficiency
+        cost_score = max(0, 1 - (material.cost / 20))  # Normalize cost
+        
+        feasibility = (comfort_score * 0.4 + polarization_score * 0.4 + cost_score * 0.2) * 100
+        
+        metrics = [
+            f"Biocompatibility: {comfort_score*100:.1f}%",
+            f"Optical Performance: {polarization_score*100:.1f}%",
+            f"Cost Effectiveness: {cost_score*100:.1f}%",
+            f"Overall Feasibility: {feasibility:.1f}%",
+            f"Production Grade: {'MEDICAL' if feasibility > 80 else 'PROTOTYPE' if feasibility > 60 else 'RESEARCH'}"
+        ]
+        
+        for i, text in enumerate(metrics):
+            surf = font.render(text, True, TEXT_COLOR)
+            surface.blit(surf, (self.x + 15, self.y + y_offset + 25 + i * 18))
+        
+        # Draw feasibility meter
+        meter_width = self.width - 40
+        pygame.draw.rect(surface, (50, 50, 50), (self.x + 20, self.y + self.height - 40, meter_width, 15))
+        pygame.draw.rect(surface, self.get_feasibility_color(feasibility), 
+                        (self.x + 20, self.y + self.height - 40, meter_width * feasibility/100, 15))
+        
+        feasibility_text = font.render(f"Manufacturing Readiness: {feasibility:.1f}%", True, TEXT_COLOR)
+        surface.blit(feasibility_text, (self.x + 20, self.y + self.height - 55))
+    
+    def get_feasibility_color(self, score):
+        if score > 80: return MEDICAL_GREEN
+        if score > 60: return (255, 255, 100)
+        return (255, 100, 100)
+
+class DailyUseSimulator:
+    def __init__(self, x, y, width, height):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.scenarios = {
+            "Bright Sunlight": {"glare": 0.9, "uv": 0.8, "moisture": 0.3},
+            "Night Driving": {"glare": 0.7, "uv": 0.1, "moisture": 0.6},
+            "Office Work": {"glare": 0.3, "uv": 0.2, "moisture": 0.5},
+            "Sports Activity": {"glare": 0.5, "uv": 0.6, "moisture": 0.8},
+            "Dry Environment": {"glare": 0.4, "uv": 0.4, "moisture": 0.1}
+        }
+        self.current_scenario = "Bright Sunlight"
+        
+    def draw(self, surface, lens):
+        pygame.draw.rect(surface, PANEL_BG, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(surface, HIGHLIGHT, (self.x, self.y, self.width, self.height), 2)
+        
+        title = header_font.render("DAILY USE SCENARIOS", True, BIO_BLUE)
+        surface.blit(title, (self.x + 10, self.y + 15))
+        
+        scenario = self.scenarios[self.current_scenario]
+        y_offset = 45
+        
+        # Scenario details
+        details = [
+            f"Scenario: {self.current_scenario}",
+            f"Glare Reduction: {scenario['glare']*100:.0f}% required",
+            f"UV Protection: {scenario['uv']*100:.0f}% required", 
+            f"Moisture Retention: {scenario['moisture']*100:.0f}% optimal",
+            f"Lens Performance: {lens.material.polarization_efficiency*100:.1f}%",
+            f"Comfort Level: {lens.material.get_comfort_score()*100:.1f}%"
+        ]
+        
+        for i, text in enumerate(details):
+            surf = font.render(text, True, TEXT_COLOR)
+            surface.blit(surf, (self.x + 15, self.y + y_offset + i * 18))
+        
+        # Performance indicators
+        y_offset += 120
+        performance = title_font.render("PERFORMANCE METRICS", True, HIGHLIGHT)
+        surface.blit(performance, (self.x + 15, self.y + y_offset))
+        
+        # Calculate scenario performance
+        glare_performance = min(1.0, lens.material.polarization_efficiency / scenario['glare'])
+        comfort_performance = lens.material.get_comfort_score()
+        uv_performance = 0.95  # Assumed UV protection
+        moisture_performance = max(0, 1 - (lens.material.wettability / 100))
+        
+        metrics = [
+            f"Glare Reduction: {glare_performance*100:.1f}% effective",
+            f"UV Protection: {uv_performance*100:.1f}% effective",
+            f"Moisture Retention: {moisture_performance*100:.1f}% effective",
+            f"Overall Comfort: {comfort_performance*100:.1f}% rating"
+        ]
+        
+        for i, text in enumerate(metrics):
+            surf = font.render(text, True, TEXT_COLOR)
+            surface.blit(surf, (self.x + 15, self.y + y_offset + 25 + i * 18))
+
+def main():
+    clock = pygame.time.Clock()
+    
+    # Create smart contact lens
+    contact_lens = SmartContactLens(CENTER_X, CENTER_Y, 100)
+    
+    # Add polarization layers (typical contact lens structure)
+    contact_lens.add_polarization_layer(0, 5)   # Base layer
+    contact_lens.add_polarization_layer(45, 3)  # Middle layer  
+    contact_lens.add_polarization_layer(90, 2)  # Surface layer
+    
+    # Create panels
+    manufacturing_panel = ManufacturingPanel(20, 20, 350, 300)
+    daily_use_panel = DailyUseSimulator(20, 340, 350, 250)
+    material_panel = MaterialSelectorPanel(20, 610, 350, 150)
+    
+    # Create control sliders
+    sliders = [
+        Slider(400, 650, 300, "Layer Thickness (μm)", 1, 10, 5),
+        Slider(400, 690, 300, "Auto-rotation Speed", 0, 5, 1),
+        Slider(400, 730, 300, "Manufacturing Precision", 1, 100, 85)
+    ]
+    
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                running = False
+            elif event.type == KEYDOWN:
+                if event.key == K_m:
+                    # Cycle through materials
+                    materials_list = list(MATERIALS.keys())
+                    current_index = materials_list.index(contact_lens.material.name)
+                    next_index = (current_index + 1) % len(materials_list)
+                    contact_lens.material = MATERIALS[materials_list[next_index]]
+                elif event.key == K_a:
+                    contact_lens.auto_rotation = not contact_lens.auto_rotation
+                elif event.key == K_s:
+                    # Cycle through scenarios
+                    scenarios_list = list(daily_use_panel.scenarios.keys())
+                    current_index = scenarios_list.index(daily_use_panel.current_scenario)
+                    next_index = (current_index + 1) % len(scenarios_list)
+                    daily_use_panel.current_scenario = scenarios_list[next_index]
+        
+        screen.fill(BACKGROUND)
+        
+        # Draw contact lens
+        mouse_pos = pygame.mouse.get_pos()
+        contact_lens.draw(screen, mouse_pos)
+        
+        # Update auto-rotation if enabled
+        if contact_lens.auto_rotation:
+            for layer in contact_lens.polarization_layers:
+                layer['angle'] = (layer['angle'] + contact_lens.auto_rotation_speed) % 360
+        
+        # Draw panels
+        manufacturing_panel.draw(screen, contact_lens)
+        daily_use_panel.draw(screen, contact_lens)
+        material_panel.draw(screen, contact_lens)
+        
+        # Draw control instructions
+        instructions = [
+            "CONTROLS: M - Change Material | A - Toggle Auto-rotation | S - Change Scenario",
+            "DESIGN: Smart Polarization Contact Lens with Embedded Nano-sensors",
+            "APPLICATION: Enhanced vision for visually impaired + surveillance systems"
+        ]
+        
+        for i, text in enumerate(instructions):
+            surf = font.render(text, True, MEDICAL_GREEN if i == 0 else TEXT_COLOR)
+            screen.blit(surf, (400, 20 + i * 20))
+        
+        # Draw material comparison
+        draw_material_comparison(screen, 400, 60, 500, 200, contact_lens.material)
+        
+        # Draw sliders
+        for slider in sliders:
+            slider.draw(screen)
+        
+        pygame.display.flip()
+        clock.tick(60)
+    
+    pygame.quit()
+    sys.exit()
+
+class MaterialSelectorPanel:
+    def __init__(self, x, y, width, height):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        
+    def draw(self, surface, lens):
+        pygame.draw.rect(surface, PANEL_BG, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(surface, HIGHLIGHT, (self.x, self.y, self.width, self.height), 2)
+        
+        title = header_font.render("MATERIAL SELECTOR (Press M)", True, BIO_BLUE)
+        surface.blit(title, (self.x + 10, self.y + 15))
+        
+        material = lens.material
+        y_offset = 40
+        
+        # Draw material comparison bars
+        properties = [
+            ("Oxygen Permeability", material.dk, 200),
+            ("Wettability", 100 - material.wettability, 100),  # Invert for better = longer
+            ("Comfort", material.get_comfort_score() * 100, 100),
+            ("Polarization Eff", material.polarization_efficiency * 100, 100),
+            ("Cost Effectiveness", max(0, 100 - (material.cost / 20 * 100)), 100)
+        ]
+        
+        for i, (name, value, max_val) in enumerate(properties):
+            bar_width = (value / max_val) * (self.width - 140)
+            color = MEDICAL_GREEN if value > max_val * 0.7 else BIO_BLUE if value > max_val * 0.5 else (255, 100, 100)
+            
+            # Draw bar
+            pygame.draw.rect(surface, (50, 50, 50), (self.x + 120, self.y + 45 + i * 22, self.width - 140, 12))
+            pygame.draw.rect(surface, color, (self.x + 120, self.y + 45 + i * 22, bar_width, 12))
+            
+            # Draw label
+            label = font.render(f"{name}:", True, TEXT_COLOR)
+            surface.blit(label, (self.x + 15, self.y + 45 + i * 22))
+            
+            value_text = font.render(f"{value:.1f}", True, color)
+            surface.blit(value_text, (self.x + self.width - 40, self.y + 45 + i * 22))
+
+class Slider:
+    def __init__(self, x, y, width, label, min_val=0, max_val=100, initial=50):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = 20
+        self.label = label
+        self.min = min_val
+        self.max = max_val
+        self.value = initial
+        self.dragging = True
+        
+    def draw(self, surface):
+        pygame.draw.rect(surface, PANEL_BG, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(surface, HIGHLIGHT, (self.x, self.y, self.width, self.height), 1)
+        
+        handle_x = self.x + (self.value - self.min) / (self.max - self.min) * self.width
+        pygame.draw.circle(surface, HIGHLIGHT, (int(handle_x), self.y + self.height // 2), 8)
+        
+        label_text = font.render(f"{self.label}: {self.value:.1f}", True, TEXT_COLOR)
+        surface.blit(label_text, (self.x, self.y - 20))
+
+def draw_material_comparison(surface, x, y, width, height, current_material):
+    pygame.draw.rect(surface, PANEL_BG, (x, y, width, height))
+    pygame.draw.rect(surface, HIGHLIGHT, (x, y, width, height), 2)
+    
+    title = header_font.render("ADVANCED MATERIALS COMPARISON (2024)", True, MEDICAL_GREEN)
+    surface.blit(title, (x + 10, y + 15))
+    
+    # Draw comparison bars for each material
+    materials = list(MATERIALS.values())
+    bar_width = (width - 150) / len(materials)
+    
+    # Compare key properties
+    properties = ["Oxygen Permeability", "Comfort Score", "Polarization Efficiency", "Cost Score"]
+    
+    for prop_idx, property_name in enumerate(properties):
+        y_pos = y + 45 + prop_idx * 35
+        
+        # Draw property label
+        prop_text = font.render(property_name, True, TEXT_COLOR)
+        surface.blit(prop_text, (x + 10, y_pos))
+        
+        # Draw bars for each material
+        for i, material in enumerate(materials):
+            if property_name == "Oxygen Permeability":
+                value = material.dk / 200
+            elif property_name == "Comfort Score":
+                value = material.get_comfort_score()
+            elif property_name == "Polarization Efficiency":
+                value = material.polarization_efficiency
+            else:  # Cost Score
+                value = max(0, 1 - (material.cost / 20))
+            
+            bar_height = value * 25
+            color = MEDICAL_GREEN if material == current_material else BIO_BLUE
+            
+            bar_x = x + 150 + i * bar_width
+            pygame.draw.rect(surface, color, (bar_x, y_pos + 25 - bar_height, bar_width - 5, bar_height))
+            
+            # Material abbreviation
+            abbr = ''.join([word[0] for word in material.name.split()])
+            abbr_text = font.render(abbr, True, color)
+            surface.blit(abbr_text, (bar_x + bar_width/2 - 10, y_pos + 28))
+
+if __name__ == "__main__":
+    main()
