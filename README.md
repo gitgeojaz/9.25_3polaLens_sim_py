@@ -1,2 +1,9 @@
-# 9.25_3polaLens_sim_py
-[Paste from chat]
+# 9.25_3polaLens_sim_py [title]
+# polarised lenses Simulation (game.py) with three lenses slider control for light input intensity,  data sampling rate (0-100) and sensor sensitivity (mode: 0-100: Grade). Each lense can snap-to-angle with light output shown.  Sensors reading panel shows readings and continous light wave output.
+# initially written with py3 code written on Deepseek 1.4.1(110).
+# 1st evaluating on pyroid3 emulator (8.1_arm64) on Android (v10.0) handset. 
+# planning to migrate using git...
+# x3 current versions; 
+# 1. aprs (Advanced Polarisation Research Simulator) shows 3 polarised plotted circles (lenses) with main angles snap control toggle, each showing polarised light flow inputs to next lense; [code]: aprs_sim01.py
+# 2. Contact lens (concept) with hydrogel embedded nano sensors includes manufacturer specifications scenario settings, manufacturing feasibility score per scenario (%), daily use scenarios (i/o), performance metrics, materials selector. Keyboard input controls; M = change material, A = Toggle auto-rotation (Angle), C = change scenario. preset slider/s (); layer thickness (μm), auto-rotation speed, manufacturing precision (0-100). [code]: clens01.py
+# 3. Low Retina Count Vision Enhancement for optical nerve intact/no light penetrative (nlp). Uses (2) as above with conceptual prostethic/ artificial eye. neural pathway (triple angle polarisation optical nerve stimulation as retina). with current  manufacturers & suppliers (website select links). Keyboard controls; speed (1/2/3/0), enhancement mode:(Contrast, Motion, Neural, Edge), manufacturer/s website.  Active triple optimised angles controls; 0° (contrast), 60° (motion), 120° (neural). preset slider controls (preset: 15%,3.0,85%); retina density (%), neural amplification (1-5), :polarisation intensity (%). current Medical manufacturers & suppliers links (website/s). [code]: lbcve01.py
