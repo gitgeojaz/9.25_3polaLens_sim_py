@@ -1,0 +1,317 @@
+import pygame
+import numpy as np
+import math
+import sys
+from pygame.locals import *
+
+# Initialize Pygame
+pygame.init()
+
+# Constants
+WIDTH, HEIGHT = 1000, 700
+CENTER_X, CENTER_Y = WIDTH // 2, HEIGHT // 2
+LENS_RADIUS = 120
+LENS_SPACING = 150
+SENSOR_RESOLUTION = 200
+
+# Colors
+BACKGROUND = (15, 25, 35)
+PANEL_BG = (25, 40, 55)
+TEXT_COLOR = (220, 230, 240)
+HIGHLIGHT = (0, 200, 255)
+LENS_COLOR = (100, 150, 200, 100)
+POLARIZED_LIGHT = (255, 255, 200)
+
+# Create window
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Advanced Polarization Research Simulator - Enhanced Vision System Prototype")
+
+# Fonts
+font = pygame.font.SysFont('consolas', 14)
+title_font = pygame.font.SysFont('consolas', 16, bold=True)
+
+class PolarizationLens:
+    def __init__(self, x, y, label):
+        self.x = x
+        self.y = y
+        self.angle = 0
+        self.label = label
+        self.dragging = False
+        
+    def draw(self, surface):
+        # Draw lens circle
+        pygame.draw.circle(surface, LENS_COLOR, (self.x, self.y), LENS_RADIUS, 2)
+        
+        # Draw polarization lines
+        angle_rad = math.radians(self.angle)
+        dx = math.cos(angle_rad) * LENS_RADIUS
+        dy = math.sin(angle_rad) * LENS_RADIUS
+        
+        pygame.draw.line(surface, HIGHLIGHT, 
+                        (self.x - dx, self.y - dy), 
+                        (self.x + dx, self.y + dy), 3)
+        
+        # Draw angle indicator
+        pygame.draw.arc(surface, HIGHLIGHT, 
+                       (self.x - 20, self.y - 20, 40, 40), 
+                       0, math.radians(self.angle), 2)
+        
+        # Draw label
+        text = title_font.render(f"{self.label}: {self.angle}°", True, TEXT_COLOR)
+        surface.blit(text, (self.x - 40, self.y - LENS_RADIUS - 30))
+
+class LightSensor:
+    def __init__(self, x, y, width, height):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.intensity = 0
+        self.wave_pattern = []
+        self.polarization_data = []
+        
+    def update_sensor(self, final_intensity, polarization_angle):
+        self.intensity = final_intensity
+        # Generate wave pattern for visualization
+        self.wave_pattern = []
+        for i in range(100):
+            x = i * 4
+            y = math.sin(i * 0.3 + polarization_angle * 0.1) * final_intensity * 20
+            self.wave_pattern.append((x, y))
+            
+        # Store polarization data for research
+        if len(self.polarization_data) > 50:
+            self.polarization_data.pop(0)
+        self.polarization_data.append((final_intensity, polarization_angle))
+        
+    def draw(self, surface):
+        # Draw sensor panel
+        pygame.draw.rect(surface, PANEL_BG, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(surface, HIGHLIGHT, (self.x, self.y, self.width, self.height), 2)
+        
+        # Draw intensity meter
+        meter_height = self.intensity * (self.height - 60)
+        pygame.draw.rect(surface, (int(255 * self.intensity), int(100 * self.intensity), 50), 
+                        (self.x + 20, self.y + self.height - 20 - meter_height, 30, meter_height))
+        
+        # Draw wave pattern
+        if self.wave_pattern:
+            points = [(self.x + 100 + x, self.y + 100 + y) for x, y in self.wave_pattern]
+            if len(points) > 1:
+                pygame.draw.lines(surface, HIGHLIGHT, False, points, 2)
+        
+        # Draw scientific data
+        title = title_font.render("SCIENTIFIC SENSOR READINGS", True, HIGHLIGHT)
+        surface.blit(title, (self.x + 20, self.y + 15))
+        
+        texts = [
+            f"Transmission Intensity: {self.intensity:.4f}",
+            f"Relative Luminance: {self.intensity*100:.2f}%",
+            f"Optical Efficiency: {self.intensity*85:.2f}%",
+            f"Signal-to-Noise: {self.intensity*60:.1f} dB",
+            f"Polarization Purity: {95 - (1-self.intensity)*30:.1f}%",
+            f"Research Grade: {'CLASS A' if self.intensity > 0.8 else 'CLASS B' if self.intensity > 0.5 else 'CLASS C'}"
+        ]
+        
+        for i, text in enumerate(texts):
+            surf = font.render(text, True, TEXT_COLOR)
+            surface.blit(surf, (self.x + 20, self.y + 50 + i * 25))
+
+class Slider:
+    def __init__(self, x, y, width, label, min_val=0, max_val=100, initial=50):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = 20
+        self.label = label
+        self.min = min_val
+        self.max = max_val
+        self.value = initial
+        self.dragging = False
+        
+    def draw(self, surface):
+        # Draw slider track
+        pygame.draw.rect(surface, PANEL_BG, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(surface, HIGHLIGHT, (self.x, self.y, self.width, self.height), 1)
+        
+        # Draw slider handle
+        handle_x = self.x + (self.value - self.min) / (self.max - self.min) * self.width
+        pygame.draw.circle(surface, HIGHLIGHT, (int(handle_x), self.y + self.height // 2), 8)
+        
+        # Draw label and value
+        label_text = font.render(f"{self.label}: {self.value:.1f}", True, TEXT_COLOR)
+        surface.blit(label_text, (self.x, self.y - 20))
+
+def calculate_malus_law(intensity, angle1, angle2):
+    """Calculate light intensity after passing through polarizers using Malus's Law"""
+    angle_diff = abs(angle1 - angle2)
+    return intensity * (math.cos(math.radians(angle_diff)) ** 2)
+
+def draw_light_beam(surface, lenses, input_intensity):
+    """Draw the light beam through the lens system with proper polarization"""
+    current_intensity = input_intensity
+    current_angle = 0  # Initial polarization angle
+    
+    # Draw initial unpolarized light
+    for i in range(20):
+        offset = (i - 10) * 8
+        pygame.draw.line(surface, POLARIZED_LIGHT, 
+                        (100, CENTER_Y + offset), 
+                        (lenses[0].x - LENS_RADIUS, CENTER_Y + offset), 1)
+    
+    # Calculate light path through each lens
+    for i in range(len(lenses)):
+        lens = lenses[i]
+        
+        # Calculate intensity after this lens
+        if i == 0:
+            # First lens polarizes the light
+            output_intensity = current_intensity * 0.5  # Ideal polarizer loses 50%
+            output_angle = lens.angle
+        else:
+            # Subsequent lenses follow Malus's Law
+            output_intensity = calculate_malus_law(current_intensity, current_angle, lens.angle)
+            output_angle = lens.angle
+        
+        # Draw polarized light beam
+        beam_intensity = min(255, int(output_intensity * 255))
+        beam_color = (beam_intensity, beam_intensity, 150)
+        
+        start_x = lens.x + LENS_RADIUS if i < len(lenses) - 1 else lens.x + LENS_RADIUS
+        end_x = lenses[i + 1].x - LENS_RADIUS if i < len(lenses) - 1 else WIDTH - 100
+        
+        # Draw polarized light lines
+        angle_rad = math.radians(output_angle)
+        for j in range(15):
+            offset = (j - 7) * 6
+            dx = math.cos(angle_rad) * offset
+            dy = math.sin(angle_rad) * offset
+            
+            pygame.draw.line(surface, beam_color,
+                           (start_x, CENTER_Y + dy),
+                           (end_x, CENTER_Y + dy), 2)
+        
+        current_intensity = output_intensity
+        current_angle = output_angle
+    
+    return current_intensity, current_angle
+
+def main():
+    clock = pygame.time.Clock()
+    
+    # Create lenses
+    lenses = [
+        PolarizationLens(CENTER_X - LENS_SPACING, CENTER_Y, "Lens 1 (Input)"),
+        PolarizationLens(CENTER_X, CENTER_Y, "Lens 2 (Control)"),
+        PolarizationLens(CENTER_X + LENS_SPACING, CENTER_Y, "Lens 3 (Output)")
+    ]
+    
+    # Create sensor
+    sensor = LightSensor(WIDTH - 320, 20, 300, 300)
+    
+    # Create sliders
+    sliders = [
+        Slider(20, 500, 300, "Input Light Intensity", 0, 100, 80),
+        Slider(20, 570, 300, "Research Data Sampling Rate", 1, 100, 50),
+        Slider(20, 640, 300, "Sensor Sensitivity", 1, 100, 75)
+    ]
+    
+    # Research data
+    research_data = []
+    
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                running = False
+            elif event.type == MOUSEBUTTONDOWN:
+                # Check lens dragging
+                for lens in lenses:
+                    dx = event.pos[0] - lens.x
+                    dy = event.pos[1] - lens.y
+                    if math.sqrt(dx*dx + dy*dy) <= LENS_RADIUS:
+                        lens.dragging = True
+                
+                # Check slider dragging
+                for slider in sliders:
+                    handle_x = slider.x + (slider.value - slider.min) / (slider.max - slider.min) * slider.width
+                    if (abs(event.pos[0] - handle_x) < 15 and 
+                        abs(event.pos[1] - (slider.y + slider.height // 2)) < 15):
+                        slider.dragging = True
+            
+            elif event.type == MOUSEBUTTONUP:
+                for lens in lenses:
+                    lens.dragging = False
+                for slider in sliders:
+                    slider.dragging = False
+            
+            elif event.type == MOUSEMOTION:
+                # Handle lens rotation
+                for lens in lenses:
+                    if lens.dragging:
+                        dx = event.pos[0] - lens.x
+                        dy = event.pos[1] - lens.y
+                        lens.angle = (math.degrees(math.atan2(dy, dx)) + 360) % 360
+                
+                # Handle slider movement
+                for slider in sliders:
+                    if slider.dragging:
+                        relative_x = max(0, min(event.pos[0] - slider.x, slider.width))
+                        slider.value = slider.min + (relative_x / slider.width) * (slider.max - slider.min)
+        
+        # Clear screen
+        screen.fill(BACKGROUND)
+        
+        # Draw title and instructions
+        title = title_font.render("ADVANCED POLARIZATION RESEARCH SIMULATOR - ENHANCED VISION SYSTEM", True, HIGHLIGHT)
+        screen.blit(title, (CENTER_X - title.get_width() // 2, 10))
+        
+        subtitle = font.render("Drag lenses to rotate polarization axes. Monitor sensor readings for research data.", True, TEXT_COLOR)
+        screen.blit(subtitle, (CENTER_X - subtitle.get_width() // 2, 40))
+        
+        # Draw light beam and calculate final intensity
+        input_intensity = sliders[0].value / 100.0
+        final_intensity, final_angle = draw_light_beam(screen, lenses, input_intensity)
+        
+        # Update sensor
+        sensor.update_sensor(final_intensity, final_angle)
+        
+        # Draw lenses
+        for lens in lenses:
+            lens.draw(screen)
+        
+        # Draw sensor
+        sensor.draw(screen)
+        
+        # Draw sliders
+        for slider in sliders:
+            slider.draw(screen)
+        
+        # Draw research applications panel
+        pygame.draw.rect(screen, PANEL_BG, (20, 350, 400, 130))
+        pygame.draw.rect(screen, HIGHLIGHT, (20, 350, 400, 130), 2)
+        
+        research_title = title_font.render("RESEARCH APPLICATIONS", True, HIGHLIGHT)
+        screen.blit(research_title, (30, 360))
+        
+        research_texts = [
+            "• Smart Contact Lens Development",
+            "• Enhanced Vision Systems",
+            "• Intelligence Surveillance Optics",
+            "• Adaptive Polarization Technology",
+            f"• Current System Efficiency: {final_intensity*100:.1f}%",
+            "• Data logged for research analysis"
+        ]
+        
+        for i, text in enumerate(research_texts):
+            surf = font.render(text, True, TEXT_COLOR)
+            screen.blit(surf, (30, 390 + i * 20))
+        
+        pygame.display.flip()
+        clock.tick(60)
+    
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
