@@ -1,6 +1,6 @@
 # 9.25_3polaLens_sim_py [title]
-# code (done) posting soon..
-# non patentable (open) concept explorer simulation.
+# code (done) refer to Code: file for full py3 files as listed below. 
+# non patent (open) concept explorer simulation.
 # Initial testing platform for a polarised lenses (Simulation) (game.py) with three lenses slider control for light input intensity,  data sampling rate (0-100) and sensor sensitivity (mode: 0-100: Grade). Each lense can snap-to-angle with light output shown.  Sensors reading panel shows readings and continous light wave output.
 # initially written with py3 code written on Deepseek 1.4.1(110).
 # 1st evaluating on pyroid3 emulator (8.1_arm64) on Android (v10.0) handset. 
